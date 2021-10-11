@@ -14,7 +14,8 @@ const HomeScreen = () => {
     const [mnemonicKey, setMnemonicKey] = useState('')
     const [recoveredAddr, setRecoveredAddr] = useState('')
     const [tokenAmount, setTokenAmount] = useState('')
-
+    const [firstReceiverAddr, setFirstReceiverAddr] = useState('')
+    const [secondReceiverAddr, setSecondReceiverAddr] = useState('')
     const [message, setMessage] = useState(null)
     const [loading, setLoading] = useState(null)
     const [accountInfoAddr, setAccountInfoAddr] = useState('')
@@ -62,6 +63,14 @@ const HomeScreen = () => {
         const account = algoSDK.generateAccount()
         setReceiverAddr(account.addr)
     }
+    const generateFirstReceiverAccount = () => {
+        const account = algoSDK.generateAccount()
+        setFirstReceiverAddr(account.addr)
+    }
+    const generateSecondReceiverAccount = () => {
+        const account = algoSDK.generateAccount()
+        setSecondReceiverAddr(account.addr)
+    }
   
     const submitSingleTransaction = async () => {
         try {
@@ -102,6 +111,55 @@ const HomeScreen = () => {
             console.log(e);
         }
     }
+    const submitAtomicTransaction = async () => {
+        try {
+            const accountInfo = await algodClient.accountInformation(senderAddr).do()
+            if (accountInfo.amount < 1000000) return setMessage('you have insufficient funds to perform this transaction')
+            if (!tokenAmount) return setMessage('token amount is required')
+            if (!firstReceiverAddr || !secondReceiverAddr) return setMessage('receivers address is required')
+
+            setLoading(true)
+            setMessage(null)
+
+            const suggestedParams = await algodClient.getTransactionParams().do();
+
+            const txn1 = algoSDK.makePaymentTxnWithSuggestedParamsFromObject({
+                from: senderAddr,
+                to: firstReceiverAddr,
+                fee: 100,
+                amount: tokenAmount * 1000000,
+                suggestedParams,
+                note: new Uint8Array('success', 'utf-8'),
+            })
+            const txn2 = algoSDK.makePaymentTxnWithSuggestedParamsFromObject({
+                from: senderAddr,
+                to: secondReceiverAddr,
+                fee: 100,
+                amount: tokenAmount * 1000000,
+                suggestedParams,
+                note: new Uint8Array('success', 'utf-8'),
+            })
+
+            await algoSDK.assignGroupID([txn1, txn2])
+
+            const stnx1 = txn1.signTxn(senderSK)
+            const stnx2 = txn2.signTxn(senderSK)
+
+            const sendTx = await algodClient.sendRawTransaction([stnx1, stnx2]).do();
+
+            if (sendTx.txId) {
+                setLoading(null)
+                setMessage('success')
+            }
+
+            setTimeout(() => {
+                setMessage(null)
+            }, 3000)
+        } catch (e) {
+            console.log(e);
+        }
+    }
+
 
     return (
         <div className="container mt-5">
@@ -161,7 +219,22 @@ const HomeScreen = () => {
                         </div>
                     ) : (
                         <div className='mt-4'>
-                            atomic transaction
+                            <label className="badge bg-secondary">sender address</label>
+                            <input type="text" className="form-control form-control-sm" value={senderAddr} disabled />
+
+                            <label className="badge bg-secondary mt-3">token amount</label>
+                            <input type="number" className="form-control form-control-sm" value={tokenAmount} onChange={(e) => setTokenAmount(e.target.value)} />
+
+                            <label className="badge bg-secondary mt-3">first receiver address</label>
+                            <input type="text" className="form-control form-control-sm" value={firstReceiverAddr} onChange={(e) => setFirstReceiverAddr(e.target.value)} placeholder='first receiver address' />
+                            <small className='badge bg-warning gen-receiver-btn' onClick={generateFirstReceiverAccount}>generate address</small>
+                            <br />
+                            <label className="badge bg-secondary mt-3">second receiver address</label>
+                            <input type="text" className="form-control form-control-sm" value={secondReceiverAddr} onChange={(e) => setSecondReceiverAddr(e.target.value)} placeholder='first receiver address' />
+                            <small className='badge bg-warning gen-receiver-btn' onClick={generateSecondReceiverAccount}>generate address</small>
+                            <br />
+                            <button className='btn btn-sm btn-primary col-5 mt-2 mb-4' onClick={submitAtomicTransaction}>send</button> <br />
+                            <small>fund sender address at: <Link to={{ pathname: 'https://bank.testnet.algorand.network/' }} target={'_blank'}>Testnet Bank</Link></small>
                         </div>
                     )}
                 </div>
