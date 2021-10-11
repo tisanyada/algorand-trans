@@ -191,7 +191,7 @@ const HomeScreen = () => {
                     />
                     <button className='btn btn-info col-5 btn-sm mt-2 mb-2 text-white' onClick={recoverAccount}>recover account</button> <br />
                     <div className='badge alert-light' style={{ width: '40px' }}>{recoveredAddr}</div>
-
+                    <Link to='/create-token' className='btn btn-dark col-5 mt-5'>create token</Link>
                     <hr />
                 </div>
                 <div className="col-md-5 right">
