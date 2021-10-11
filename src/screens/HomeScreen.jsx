@@ -1,21 +1,25 @@
 import 'assets/home.css'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import algoSDK from 'algosdk'
+import { Link } from 'react-router-dom'
 
 
 
 
 const HomeScreen = () => {
-    // const senderMnemonic = 'come image neglect eternal poem body wave panel resist region garage whisper master chair embrace blade amused rhythm liberty flag split aim gun abandon donkey'
-
+    const senderMnemonic = 'come image neglect eternal poem body wave panel resist region garage whisper master chair embrace blade amused rhythm liberty flag split aim gun abandon donkey'
+    const [senderAddr, setSenderAddr] = useState('')
+    const [senderSK, setSenderSK] = useState('')
+    const [receiverAddr, setReceiverAddr] = useState('')
     const [mnemonicKey, setMnemonicKey] = useState('')
     const [recoveredAddr, setRecoveredAddr] = useState('')
-   
+    const [tokenAmount, setTokenAmount] = useState('')
 
     const [message, setMessage] = useState(null)
     const [loading, setLoading] = useState(null)
     const [accountInfoAddr, setAccountInfoAddr] = useState('')
     const [accountBalance, setAccountBalance] = useState('')
+    const [displaySingle, setDisplaySingle] = useState(true)
 
     // client connection params - to get yours visit https://developer.purestake.io
     const port = ''
@@ -27,7 +31,12 @@ const HomeScreen = () => {
     const algodClient = new algoSDK.Algodv2(token, baseServer, port)
 
 
- 
+    useEffect(() => {
+        const senderAccount = algoSDK.mnemonicToSecretKey(senderMnemonic)
+        setSenderAddr(senderAccount.addr)
+        setSenderSK(senderAccount.sk)
+    }, [])
+    
 
 
     const getAccountInfo = async () => {
@@ -49,6 +58,50 @@ const HomeScreen = () => {
         setLoading(null)
     }
 
+    const generateReceiverAccount = () => {
+        const account = algoSDK.generateAccount()
+        setReceiverAddr(account.addr)
+    }
+  
+    const submitSingleTransaction = async () => {
+        try {
+            const accountInfo = await algodClient.accountInformation(senderAddr).do()
+            if (accountInfo.amount < 1000000) return setMessage('you have insufficient funds to perform this transaction')
+            if (!tokenAmount) return setMessage('token amount is required')
+            if (!receiverAddr) return setMessage('receiver address is required')
+
+            setLoading(true)
+            setMessage(null)
+
+            const params = await algodClient.getTransactionParams().do();
+            console.log(params)
+
+            const signedTxn = algoSDK.signTransaction({
+                from: senderAddr,
+                to: receiverAddr,
+                fee: 100,
+                amount: tokenAmount * 1000000,
+                firstRound: params.firstRound,
+                lastRound: params.lastRound,
+                genesisID: params.genesisID,
+                genesisHash: params.genesisHash,
+                // params,
+                note: new Uint8Array(0),
+            }, senderSK);
+            const sendTx = await algodClient.sendRawTransaction(signedTxn.blob).do();
+
+            if (sendTx.txId) {
+                setLoading(null)
+                setMessage('success')
+            }
+
+            setTimeout(() => {
+                setMessage(null)
+            }, 3000)
+        } catch (e) {
+            console.log(e);
+        }
+    }
 
     return (
         <div className="container mt-5">
@@ -83,7 +136,35 @@ const HomeScreen = () => {
 
                     <hr />
                 </div>
-               
+                <div className="col-md-5 right">
+                    <hr />
+                    <p className="badge bg-dark">transactions</p> <br />
+                    <div className="btn-group" role="group" aria-label="Basic example">
+                        <span className={`badge badge-sm trans-btn ${displaySingle ? 'bg-light text-dark' : 'bg-success text-white'}`} onClick={() => setDisplaySingle(!displaySingle)}>
+                            {displaySingle ? 'single transaction' : 'atomic transaction'}
+                        </span>
+                    </div>
+                    {displaySingle ? (
+                        <div className='mt-4'>
+                            <label className="badge bg-secondary">sender address</label>
+                            <input type="text" className="form-control form-control-sm" value={senderAddr} disabled />
+
+                            <label className="badge bg-secondary mt-3">token amount</label>
+                            <input type="number" className="form-control form-control-sm" value={tokenAmount} onChange={(e) => setTokenAmount(e.target.value)} />
+
+                            <label className="badge bg-secondary mt-3">receiver address</label>
+                            <input type="text" className="form-control form-control-sm" value={receiverAddr} onChange={(e) => setReceiverAddr(e.target.value)} placeholder='receiver address' />
+                            <small className='badge bg-warning gen-receiver-btn' onClick={generateReceiverAccount}>generate address</small>
+                            <br />
+                            <button className='btn btn-sm btn-primary col-5 mt-2 mb-4' onClick={submitSingleTransaction}>send</button> <br />
+                            <small>fund sender address at: <Link to={{ pathname: 'https://bank.testnet.algorand.network/' }} target={'_blank'}>Testnet Bank</Link></small>
+                        </div>
+                    ) : (
+                        <div className='mt-4'>
+                            atomic transaction
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     )
